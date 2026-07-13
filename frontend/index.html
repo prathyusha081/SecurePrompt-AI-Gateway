@@ -19,7 +19,7 @@
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
 
-const API_BASE = window.SECUREPROMPT_API_BASE || "http://localhost:8000/api";
+const API_BASE = window.SECUREPROMPT_API_BASE || "https://secureprompt-ai-gateway-backend.onrender.com/api";
 const API_KEY = window.SECUREPROMPT_API_KEY || "";
 const DEMO_MODE = window.SECUREPROMPT_DEMO_MODE || false;
 const GITHUB_URL = window.SECUREPROMPT_GITHUB_URL || "";
@@ -314,8 +314,8 @@ function App() {
   const [masking, setMasking] = React.useState(false);
   const [maskedPrompt, setMaskedPrompt] = React.useState(null);
   const [llmResponse, setLlmResponse] = React.useState(null);
-  const [provider, setProvider] = React.useState("ollama");
-  const [model, setModel] = React.useState("llama3");
+  const [provider, setProvider] = React.useState("groq");
+  const [model, setModel] = React.useState("llama-3.1-8b-instant");
   const [error, setError] = React.useState(null);
   const [tab, setTab] = React.useState("gateway");
 
@@ -430,6 +430,7 @@ function App() {
         <div className="flex items-center gap-3 mt-3">
           <select value={provider} onChange={(e) => setProvider(e.target.value)}
             className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+            <option value="groq">Groq (Free)</option>
             <option value="ollama">Ollama (local)</option>
             <option value="openai">OpenAI-compatible</option>
           </select>
