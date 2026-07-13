@@ -1,0 +1,11 @@
+# Netlify deployment config for the static frontend.
+# Deploy: drag-and-drop the frontend/ folder at https://app.netlify.com/drop
+# or connect the GitHub repo and set "Base directory" = frontend, "Publish directory" = frontend
+
+[build]
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

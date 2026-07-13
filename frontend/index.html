@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>SecurePrompt AI Gateway</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.25.6/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="config.js"></script>
+<style>
+  body { background:#0b0f19; }
+  ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background:#334155; border-radius:4px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+
+const API_BASE = window.SECUREPROMPT_API_BASE || "http://localhost:8000/api";
+const API_KEY = window.SECUREPROMPT_API_KEY || "";
+const DEMO_MODE = window.SECUREPROMPT_DEMO_MODE || false;
+const GITHUB_URL = window.SECUREPROMPT_GITHUB_URL || "";
+
+async function apiCall(path, options = {}) {
+  const resp = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": API_KEY,
+      ...(options.headers || {}),
+    },
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+    throw new Error(err.detail || "Request failed");
+  }
+  return resp.json();
+}
+
+const RISK_COLORS = {
+  LOW: "text-emerald-400 border-emerald-500/40 bg-emerald-500/10",
+  MEDIUM: "text-yellow-400 border-yellow-500/40 bg-yellow-500/10",
+  HIGH: "text-orange-400 border-orange-500/40 bg-orange-500/10",
+  CRITICAL: "text-red-400 border-red-500/40 bg-red-500/10",
+};
+
+function RiskBadge({ level }) {
+  return (
+    <span className={`px-3 py-1 rounded-full border text-sm font-semibold ${RISK_COLORS[level] || ""}`}>
+      {level}
+    </span>
+  );
+}
+
+function SecurityReport({ report, onMask, masking }) {
+  if (!report) return null;
+  const entityList = Object.entries(report.detected_entity_summary || {});
+
+  return (
+    <div className="mt-6 rounded-xl border border-slate-700 bg-slate-900/60 p-5 space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <span className="text-slate-300 font-mono text-sm">Risk Score: {report.risk_score}/100</span>
+          <RiskBadge level={report.risk_level} />
+        </div>
+        <span className={`text-sm font-semibold ${report.decision === "BLOCK" ? "text-red-400" : report.decision === "WARN" ? "text-yellow-400" : "text-emerald-400"}`}>
+          Decision: {report.decision}
+        </span>
+      </div>
+
+      {entityList.length > 0 && (
+        <div>
+          <p className="text-slate-400 text-sm mb-1">Detected:</p>
+          <div className="flex flex-wrap gap-2">
+            {entityList.map(([type, count]) => (
+              <span key={type} className="text-xs font-mono px-2 py-1 rounded bg-slate-800 text-slate-200 border border-slate-700">
+                ✓ {type} {count > 1 ? `(${count})` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {report.policy_violations?.length > 0 && (
+        <div>
+          <p className="text-slate-400 text-sm mb-1">Policy Violated:</p>
+          <div className="flex flex-wrap gap-2">
+            {report.policy_violations.map((v) => (
+              <span key={v.policy_name} className="text-xs font-mono px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/30">
+                {v.policy_name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {report.recommendations?.length > 0 && (
+        <div>
+          <p className="text-slate-400 text-sm mb-1">Recommendation:</p>
+          <ul className="list-disc list-inside text-sm text-slate-300 space-y-1">
+            {report.recommendations.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {report.auto_fix_available && (
+        <button
+          onClick={onMask}
+          disabled={masking}
+          className="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium disabled:opacity-50"
+        >
+          {masking ? "Masking..." : "🛡 Mask Sensitive Data (Auto Fix)"}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }) {
+  return (
+    <div className={`rounded-xl border border-slate-700 bg-slate-900/60 p-4 flex-1 min-w-[140px]`}>
+      <p className="text-slate-400 text-xs uppercase tracking-wide">{label}</p>
+      <p className={`text-2xl font-bold mt-1 ${accent || "text-slate-100"}`}>{value}</p>
+    </div>
+  );
+}
+
+function DashboardTab() {
+  const [summary, setSummary] = React.useState(null);
+  const [error, setError] = React.useState(null);
+  const decisionChartRef = React.useRef(null);
+  const entityChartRef = React.useRef(null);
+  const chartInstances = React.useRef({});
+
+  const load = async () => {
+    try {
+      const res = await apiCall("/dashboard/summary");
+      setSummary(res);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  React.useEffect(() => { load(); }, []);
+
+  React.useEffect(() => {
+    if (!summary || !window.Chart) return;
+
+    Object.values(chartInstances.current).forEach((c) => c && c.destroy());
+
+    if (decisionChartRef.current) {
+      chartInstances.current.decision = new Chart(decisionChartRef.current, {
+        type: "doughnut",
+        data: {
+          labels: ["Allowed", "Warned", "Blocked"],
+          datasets: [{
+            data: [summary.allowed, summary.warned, summary.blocked],
+            backgroundColor: ["#34d399", "#facc15", "#f87171"],
+            borderWidth: 0,
+          }],
+        },
+        options: { plugins: { legend: { labels: { color: "#cbd5e1" } } } },
+      });
+    }
+
+    if (entityChartRef.current && summary.top_detected_entities?.length) {
+      chartInstances.current.entity = new Chart(entityChartRef.current, {
+        type: "bar",
+        data: {
+          labels: summary.top_detected_entities.map(([k]) => k),
+          datasets: [{
+            label: "Occurrences",
+            data: summary.top_detected_entities.map(([, v]) => v),
+            backgroundColor: "#818cf8",
+          }],
+        },
+        options: {
+          indexAxis: "y",
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+            y: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
+          },
+        },
+      });
+    }
+  }, [summary]);
+
+  if (error) return <div className="text-red-400 text-sm">{error}</div>;
+  if (!summary) return <div className="text-slate-400 text-sm">Loading dashboard...</div>;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap gap-4">
+        <StatCard label="Requests Processed" value={summary.requests_processed} />
+        <StatCard label="Allowed" value={summary.allowed} accent="text-emerald-400" />
+        <StatCard label="Warned" value={summary.warned} accent="text-yellow-400" />
+        <StatCard label="Blocked" value={summary.blocked} accent="text-red-400" />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+          <p className="text-slate-300 text-sm mb-3 font-semibold">Decision Breakdown</p>
+          <canvas ref={decisionChartRef} height="200"></canvas>
+        </div>
+        <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+          <p className="text-slate-300 text-sm mb-3 font-semibold">Top Detected Entities</p>
+          {summary.top_detected_entities?.length ? (
+            <canvas ref={entityChartRef} height="200"></canvas>
+          ) : (
+            <p className="text-slate-500 text-sm">No detections yet — run some prompts through Analyze.</p>
+          )}
+        </div>
+      </div>
+
+      <button onClick={load} className="text-sm text-indigo-400 hover:text-indigo-300">↻ Refresh</button>
+    </div>
+  );
+}
+
+function AuditLogTab() {
+  const [logs, setLogs] = React.useState([]);
+  const [error, setError] = React.useState(null);
+
+  const load = async () => {
+    try {
+      const res = await apiCall("/audit-logs?limit=50");
+      setLogs(res);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  React.useEffect(() => { load(); }, []);
+
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 overflow-x-auto">
+      <div className="flex justify-between items-center mb-3">
+        <p className="text-slate-300 text-sm font-semibold">Recent Requests (metadata only — no raw prompt content stored)</p>
+        <button onClick={load} className="text-sm text-indigo-400 hover:text-indigo-300">↻ Refresh</button>
+      </div>
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-slate-400 text-left border-b border-slate-800">
+            <th className="py-2 pr-3">Time</th>
+            <th className="py-2 pr-3">Decision</th>
+            <th className="py-2 pr-3">Risk</th>
+            <th className="py-2 pr-3">Entities</th>
+            <th className="py-2 pr-3">Policies</th>
+            <th className="py-2 pr-3">Provider/Model</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((l) => (
+            <tr key={l.id} className="border-b border-slate-800/50">
+              <td className="py-2 pr-3 text-slate-400">{new Date(l.timestamp).toLocaleString()}</td>
+              <td className={`py-2 pr-3 font-semibold ${l.decision === "BLOCK" ? "text-red-400" : l.decision === "WARN" ? "text-yellow-400" : "text-emerald-400"}`}>{l.decision}</td>
+              <td className="py-2 pr-3">{l.risk_score} ({l.risk_level})</td>
+              <td className="py-2 pr-3 text-slate-300">{(l.entity_types || []).join(", ") || "—"}</td>
+              <td className="py-2 pr-3 text-slate-300">{(l.policy_violations || []).join(", ") || "—"}</td>
+              <td className="py-2 pr-3 text-slate-400">{l.provider || "—"} / {l.model || "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {logs.length === 0 && <p className="text-slate-500 text-sm mt-3">No requests analyzed yet.</p>}
+    </div>
+  );
+}
+
+function PoliciesTab() {
+  const [policies, setPolicies] = React.useState([]);
+  const [error, setError] = React.useState(null);
+
+  React.useEffect(() => {
+    apiCall("/policies").then(setPolicies).catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <div className="text-red-400 text-sm">{error}</div>;
+
+  return (
+    <div className="space-y-3">
+      <p className="text-slate-400 text-sm">
+        Loaded from <code className="text-indigo-300">backend/app/policy/policies.yaml</code> — edit that file (no code changes needed) to change enforcement.
+      </p>
+      {policies.map((p) => (
+        <div key={p.name} className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+          <div className="flex items-center justify-between">
+            <span className="font-mono text-sm text-slate-100">{p.name}</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full border ${
+              p.action === "BLOCK" ? "border-red-500/40 text-red-400" :
+              p.action === "WARN" ? "border-yellow-500/40 text-yellow-400" :
+              "border-emerald-500/40 text-emerald-400"}`}>{p.action}</span>
+          </div>
+          <p className="text-slate-400 text-sm mt-1">{p.description}</p>
+          {p.match_entity_types?.length > 0 && (
+            <p className="text-xs text-slate-500 mt-2 font-mono">{p.match_entity_types.join(", ")}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function App() {
+  const [prompt, setPrompt] = React.useState("");
+  const [report, setReport] = React.useState(null);
+  const [analyzing, setAnalyzing] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+  const [masking, setMasking] = React.useState(false);
+  const [maskedPrompt, setMaskedPrompt] = React.useState(null);
+  const [llmResponse, setLlmResponse] = React.useState(null);
+  const [provider, setProvider] = React.useState("ollama");
+  const [model, setModel] = React.useState("llama3");
+  const [error, setError] = React.useState(null);
+  const [tab, setTab] = React.useState("gateway");
+
+  const handleAnalyze = async () => {
+    setAnalyzing(true);
+    setError(null);
+    setLlmResponse(null);
+    setMaskedPrompt(null);
+    try {
+      const res = await apiCall("/analyze", {
+        method: "POST",
+        body: JSON.stringify({ prompt, provider, model }),
+      });
+      setReport(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const handleMask = async () => {
+    setMasking(true);
+    try {
+      const res = await apiCall("/mask", { method: "POST", body: JSON.stringify({ prompt }) });
+      setMaskedPrompt(res.masked_prompt);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setMasking(false);
+    }
+  };
+
+  const handleSend = async (useMasked) => {
+    if (!report) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await apiCall("/send", {
+        method: "POST",
+        body: JSON.stringify({
+          request_id: report.request_id,
+          prompt,
+          provider,
+          model,
+          use_masked_version: useMasked,
+        }),
+      });
+      setLlmResponse(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const sendEnabled = report && report.send_enabled;
+
+  return (
+    <div className="min-h-screen text-slate-100 max-w-4xl mx-auto px-6 py-10">
+      {DEMO_MODE && (
+        <div className="mb-4 text-xs px-3 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
+          🌐 Public demo — do not paste real sensitive data. Requests are rate-limited and audit metadata (no raw prompt content) may be logged.
+        </div>
+      )}
+      <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">🛡️ SecurePrompt AI Gateway</h1>
+          <p className="text-slate-400 text-sm mt-1">Zero-Trust firewall for prompts and attachments — nothing reaches the LLM unanalyzed.</p>
+        </div>
+        {GITHUB_URL && (
+          <a href={GITHUB_URL} target="_blank" rel="noreferrer"
+            className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+            ⭐ View on GitHub
+          </a>
+        )}
+      </header>
+
+      <nav className="flex gap-1 mb-6 border-b border-slate-800">
+        {[
+          ["gateway", "🔍 Gateway"],
+          ["dashboard", "📊 Dashboard"],
+          ["audit", "📜 Audit Log"],
+          ["policies", "⚙️ Policies"],
+        ].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              tab === key ? "border-indigo-500 text-indigo-300" : "border-transparent text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {tab === "dashboard" && <DashboardTab />}
+      {tab === "audit" && <AuditLogTab />}
+      {tab === "policies" && <PoliciesTab />}
+
+      {tab === "gateway" && <>
+      <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-5">
+        <textarea
+          value={prompt}
+          onChange={(e) => { setPrompt(e.target.value); setReport(null); }}
+          placeholder="Type your prompt here..."
+          rows={6}
+          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+
+        <div className="flex items-center gap-3 mt-3">
+          <select value={provider} onChange={(e) => setProvider(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm">
+            <option value="ollama">Ollama (local)</option>
+            <option value="openai">OpenAI-compatible</option>
+          </select>
+          <input value={model} onChange={(e) => setModel(e.target.value)}
+            placeholder="model name (e.g. llama3)"
+            className="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-sm flex-1" />
+        </div>
+
+        <div className="flex gap-3 mt-4">
+          <button onClick={handleAnalyze} disabled={!prompt || analyzing}
+            className="px-5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium disabled:opacity-40">
+            {analyzing ? "Analyzing..." : "🔍 Analyze"}
+          </button>
+          <button onClick={() => handleSend(false)} disabled={!sendEnabled || sending}
+            className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 font-medium disabled:opacity-40 disabled:cursor-not-allowed">
+            {sending ? "Sending..." : "🚀 Send"}
+          </button>
+          {maskedPrompt && (
+            <button onClick={() => handleSend(true)} disabled={sending}
+              className="px-5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-medium disabled:opacity-40">
+              Send Masked Version
+            </button>
+          )}
+        </div>
+        {!sendEnabled && report && (
+          <p className="text-red-400 text-sm mt-2">🚫 Sensitive information detected. Send is disabled until resolved.</p>
+        )}
+      </div>
+
+      {error && (
+        <div className="mt-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm">{error}</div>
+      )}
+
+      <SecurityReport report={report} onMask={handleMask} masking={masking} />
+
+      {maskedPrompt && (
+        <div className="mt-4 rounded-xl border border-indigo-700/40 bg-indigo-500/5 p-4">
+          <p className="text-indigo-300 text-sm mb-2">Masked Preview:</p>
+          <pre className="whitespace-pre-wrap text-sm font-mono text-slate-200">{maskedPrompt}</pre>
+        </div>
+      )}
+
+      {llmResponse && (
+        <div className="mt-6 rounded-xl border border-slate-700 bg-slate-900/60 p-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-slate-400 text-sm">Response from {llmResponse.provider_used} / {llmResponse.model_used}</p>
+            {llmResponse.was_sanitized && (
+              <span className="text-xs px-2 py-1 rounded bg-yellow-500/10 text-yellow-300 border border-yellow-500/30">Output sanitized</span>
+            )}
+          </div>
+          <p className="whitespace-pre-wrap text-sm">{llmResponse.response_text}</p>
+        </div>
+      )}
+      </>}
+
+      <footer className="mt-12 pt-6 border-t border-slate-800 text-xs text-slate-500 flex justify-between flex-wrap gap-2">
+        <span>SecurePrompt AI Gateway — open source Zero-Trust AI DLP firewall.</span>
+        {GITHUB_URL && <a href={GITHUB_URL} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300">Source code →</a>}
+      </footer>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

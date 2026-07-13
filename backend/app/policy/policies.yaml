@@ -1,0 +1,82 @@
+# SecurePrompt AI Gateway — Policy Configuration
+# Edit this file (or PUT /api/policies) to change enforcement behavior
+# without touching any code. Reloaded on every /analyze call.
+
+policies:
+  - name: BLOCK_PII
+    description: "Block prompts containing structured PII (Aadhaar, PAN, SSN, Passport, Credit Card)."
+    action: BLOCK
+    match_entity_types:
+      - AADHAAR
+      - PAN_CARD
+      - SSN_US
+      - PASSPORT_IN
+      - CREDIT_CARD
+
+  - name: BLOCK_SECRETS
+    description: "Block any prompt containing cloud credentials, private keys, or tokens."
+    action: BLOCK
+    match_entity_types:
+      - AWS_ACCESS_KEY
+      - AWS_SECRET_KEY
+      - AZURE_KEY
+      - GCP_API_KEY
+      - PRIVATE_KEY_BLOCK
+      - GITHUB_TOKEN
+      - SLACK_TOKEN
+      - JWT_TOKEN
+      - GENERIC_API_KEY
+      - DB_CONNECTION_STRING
+      - OPENAI_KEY
+      - PASSWORD_FIELD
+
+  - name: BLOCK_FINANCIAL
+    description: "Block payroll, bank account, and financial-statement content."
+    action: BLOCK
+    match_entity_types:
+      - BANK_ACCOUNT
+      - IFSC_CODE
+      - DOC_CLASS_PAYROLL
+      - DOC_CLASS_FINANCIAL
+
+  - name: BLOCK_INTERNAL_DOC
+    description: "Block confidential/restricted internal documents, architecture diagrams, and customer data."
+    action: BLOCK
+    match_entity_types:
+      - DOC_CLASS_ARCHITECTURE_DOC
+      - DOC_CLASS_CUSTOMER_DATA
+
+  - name: BLOCK_PHI
+    description: "Block medical/health information."
+    action: BLOCK
+    match_entity_types:
+      - DOC_CLASS_MEDICAL
+
+  - name: BLOCK_JAILBREAK
+    description: "Block known jailbreak-framing attempts."
+    action: BLOCK
+    match_entity_types_prefix: "JAILBREAK_"
+
+  - name: WARN_PROMPT_INJECTION
+    description: "Warn (but do not hard-block) on possible prompt injection language."
+    action: WARN
+    match_entity_types:
+      - PROMPT_INJECTION_PHRASE
+
+  - name: WARN_PHONE
+    description: "Warn on phone numbers; allow send after acknowledgement."
+    action: WARN
+    match_entity_types:
+      - PHONE_IN
+      - PHONE_INTL
+
+  - name: ALLOW_EMAIL
+    description: "Emails are allowed by default (common in legitimate business prompts)."
+    action: ALLOW
+    match_entity_types:
+      - EMAIL
+
+  - name: ALLOW_MASKED_CONTENT
+    description: "If the user has applied auto-masking, allow send even if original had violations."
+    action: ALLOW_IF_MASKED
+    match_entity_types: []

@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    container_name: secureprompt-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:////app/gateway.db
+      - API_KEY=dev-local-api-key
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - gateway_data:/app
+    depends_on:
+      - ollama
+
+  frontend:
+    build: ./frontend
+    container_name: secureprompt-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: secureprompt-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  gateway_data:
+  ollama_data:

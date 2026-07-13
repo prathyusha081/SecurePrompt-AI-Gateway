@@ -1,0 +1,30 @@
+# Render.com "Blueprint" — free-tier backend deployment.
+# Push this repo to GitHub, then in Render: New -> Blueprint -> select repo.
+# Render reads this file and provisions the service automatically.
+# Free tier: service sleeps after 15 min idle, wakes on next request (~30-50s cold start).
+
+services:
+  - type: web
+    name: secureprompt-ai-gateway-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENV
+        value: production
+      - key: API_KEY
+        generateValue: true          # Render generates a secure random key for you
+      - key: DEMO_MODE
+        value: "true"
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "20"
+      - key: DATABASE_URL
+        value: sqlite:////opt/render/project/src/backend/gateway.db
+      - key: DEFAULT_LLM_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false                  # set manually in Render dashboard (free key from console.groq.com)
+      - key: GROQ_DEFAULT_MODEL
+        value: llama-3.1-8b-instant
