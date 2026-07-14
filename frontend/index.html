@@ -25,13 +25,16 @@ const DEMO_MODE = window.SECUREPROMPT_DEMO_MODE || false;
 const GITHUB_URL = window.SECUREPROMPT_GITHUB_URL || "";
 
 async function apiCall(path, options = {}) {
+  const headers = {
+    "X-API-Key": API_KEY,
+    ...(options.headers || {}),
+  };
+  if (!(options.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
   const resp = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      "X-API-Key": API_KEY,
-      ...(options.headers || {}),
-    },
+    headers,
   });
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({ detail: resp.statusText }));
@@ -319,16 +322,52 @@ function App() {
   const [error, setError] = React.useState(null);
   const [tab, setTab] = React.useState("gateway");
 
+  // File Upload States
+  const [selectedFile, setSelectedFile] = React.useState(null);
+  const [extractedText, setExtractedText] = React.useState("");
+  const [showExtractedText, setShowExtractedText] = React.useState(false);
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+      setReport(null);
+      setExtractedText("");
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setExtractedText("");
+    setReport(null);
+  };
+
   const handleAnalyze = async () => {
     setAnalyzing(true);
     setError(null);
     setLlmResponse(null);
     setMaskedPrompt(null);
+    setExtractedText("");
     try {
-      const res = await apiCall("/analyze", {
-        method: "POST",
-        body: JSON.stringify({ prompt, provider, model }),
-      });
+      let res;
+      if (selectedFile) {
+        const formData = new FormData();
+        formData.append("prompt", prompt);
+        formData.append("file", selectedFile);
+        
+        res = await apiCall("/analyze-file", {
+          method: "POST",
+          body: formData,
+        });
+        if (res.extracted_text) {
+          setExtractedText(res.extracted_text);
+          setShowExtractedText(true);
+        }
+      } else {
+        res = await apiCall("/analyze", {
+          method: "POST",
+          body: JSON.stringify({ prompt, provider, model }),
+        });
+      }
       setReport(res);
     } catch (e) {
       setError(e.message);
@@ -340,7 +379,8 @@ function App() {
   const handleMask = async () => {
     setMasking(true);
     try {
-      const res = await apiCall("/mask", { method: "POST", body: JSON.stringify({ prompt }) });
+      const targetPrompt = selectedFile ? `${prompt}\n${extractedText}` : prompt;
+      const res = await apiCall("/mask", { method: "POST", body: JSON.stringify({ prompt: targetPrompt }) });
       setMaskedPrompt(res.masked_prompt);
     } catch (e) {
       setError(e.message);
@@ -354,11 +394,12 @@ function App() {
     setSending(true);
     setError(null);
     try {
+      const targetPrompt = (selectedFile && !useMasked) ? `${prompt}\n${extractedText}` : prompt;
       const res = await apiCall("/send", {
         method: "POST",
         body: JSON.stringify({
           request_id: report.request_id,
-          prompt,
+          prompt: targetPrompt,
           provider,
           model,
           use_masked_version: useMasked,
@@ -418,14 +459,41 @@ function App() {
       {tab === "policies" && <PoliciesTab />}
 
       {tab === "gateway" && <>
-      <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-5">
-        <textarea
-          value={prompt}
-          onChange={(e) => { setPrompt(e.target.value); setReport(null); }}
-          placeholder="Type your prompt here..."
-          rows={6}
-          className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
+      <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-5 space-y-4">
+        <div>
+          <textarea
+            value={prompt}
+            onChange={(e) => { setPrompt(e.target.value); setReport(null); }}
+            placeholder="Type your prompt here..."
+            rows={6}
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          
+          <div className="flex items-center gap-3 mt-2">
+            <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-white text-xs cursor-pointer transition-colors duration-200">
+              📎 Attach File
+              <input
+                type="file"
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".txt,.md,.csv,.json,.pdf,.docx,.xlsx,.png,.jpg,.jpeg,.py,.js,.ts,.java,.yaml,.yml"
+              />
+            </label>
+            
+            {selectedFile && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs">
+                <span>📄 {selectedFile.name} ({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                <button
+                  onClick={handleRemoveFile}
+                  className="hover:text-red-400 font-bold transition-colors ml-1"
+                  title="Remove file"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="flex items-center gap-3 mt-3">
           <select value={provider} onChange={(e) => setProvider(e.target.value)}
@@ -440,7 +508,7 @@ function App() {
         </div>
 
         <div className="flex gap-3 mt-4">
-          <button onClick={handleAnalyze} disabled={!prompt || analyzing}
+          <button onClick={handleAnalyze} disabled={(!prompt && !selectedFile) || analyzing}
             className="px-5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-medium disabled:opacity-40">
             {analyzing ? "Analyzing..." : "🔍 Analyze"}
           </button>
@@ -465,6 +533,25 @@ function App() {
       )}
 
       <SecurityReport report={report} onMask={handleMask} masking={masking} />
+
+      {extractedText && (
+        <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900/40 p-4">
+          <button
+            onClick={() => setShowExtractedText(!showExtractedText)}
+            className="flex items-center justify-between w-full text-sm font-semibold text-slate-300 hover:text-slate-100"
+          >
+            <span className="flex items-center gap-2">
+              📝 Extracted File Content ({selectedFile?.name})
+            </span>
+            <span>{showExtractedText ? "▲ Hide" : "▼ Show"}</span>
+          </button>
+          {showExtractedText && (
+            <pre className="mt-3 p-3 bg-slate-950/80 rounded-lg border border-slate-800 text-xs font-mono text-slate-300 max-h-60 overflow-y-auto whitespace-pre-wrap">
+              {extractedText}
+            </pre>
+          )}
+        </div>
+      )}
 
       {maskedPrompt && (
         <div className="mt-4 rounded-xl border border-indigo-700/40 bg-indigo-500/5 p-4">

@@ -68,6 +68,7 @@ class AnalyzeResponse(BaseModel):
     recommendations: List[str]
     masked_prompt_preview: Optional[str] = None
     auto_fix_available: bool = False
+    extracted_text: Optional[str] = None
     document_classifications: List[Dict[str, Any]] = []
     analyzed_at: datetime = Field(default_factory=datetime.utcnow)
 

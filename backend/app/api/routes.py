@@ -9,11 +9,15 @@ Zero-Trust enforcement lives here:
   3. LLM responses are re-scanned (Output Guard) before being returned.
 """
 import hashlib
+import io
 import uuid
 from typing import Dict
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
+from pypdf import PdfReader
+from docx import Document
+import openpyxl
 
 from app.models.schemas import (
     AnalyzeRequest, AnalyzeResponse, SendRequest, SendResponse,
@@ -29,6 +33,55 @@ from app.db.database import get_db
 from app.db.models import AuditLog
 from app.utils.auth import verify_api_key
 from app.config import settings
+
+def extract_text_from_file(filename: str, content: bytes) -> str:
+    ext = ("." + filename.lower().rsplit(".", 1)[-1]) if "." in filename else ""
+    if ext == ".pdf":
+        try:
+            reader = PdfReader(io.BytesIO(content))
+            text = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text.append(page_text)
+            return "\n".join(text).strip()
+        except Exception as e:
+            print(f"Error parsing PDF {filename}: {e}")
+            return ""
+    elif ext == ".docx":
+        try:
+            doc = Document(io.BytesIO(content))
+            text = []
+            for para in doc.paragraphs:
+                if para.text:
+                    text.append(para.text)
+            for table in doc.tables:
+                for row in table.rows:
+                    row_text = [cell.text for cell in row.cells if cell.text]
+                    if row_text:
+                        text.append(" ".join(row_text))
+            return "\n".join(text).strip()
+        except Exception as e:
+            print(f"Error parsing DOCX {filename}: {e}")
+            return ""
+    elif ext == ".xlsx":
+        try:
+            wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+            text = []
+            for sheet in wb.worksheets:
+                for row in sheet.iter_rows(values_only=True):
+                    row_vals = [str(cell) for cell in row if cell is not None]
+                    if row_vals:
+                        text.append(" | ".join(row_vals))
+            return "\n".join(text).strip()
+        except Exception as e:
+            print(f"Error parsing XLSX {filename}: {e}")
+            return ""
+    else:
+        try:
+            return content.decode("utf-8", errors="ignore")
+        except Exception:
+            return ""
 
 router = APIRouter()
 
@@ -119,14 +172,9 @@ async def analyze_file(prompt: str = Form(""), file: UploadFile = File(...), db:
 
     file_finding = attachment_scanner.scan_file(file.filename, content)
 
-    # Best-effort text extraction for plain-text-like files; binary formats
-    # (pdf/docx/xlsx) are Phase 2 (see docs/roadmap.md for the OCR/parsing hook).
-    try:
-        extracted_text = content.decode("utf-8", errors="ignore")
-    except Exception:
-        extracted_text = ""
+    extracted_text = extract_text_from_file(file.filename, content)
 
-    combined_text = f"{prompt}\n{extracted_text}"
+    combined_text = f"{prompt}\n{extracted_text}" if prompt else extracted_text
     findings = pipeline.run(combined_text, filename=file.filename)
     findings.append(file_finding)
 
@@ -168,6 +216,7 @@ async def analyze_file(prompt: str = Form(""), file: UploadFile = File(...), db:
         recommendations=_build_recommendations(findings, policy_result["violations"]),
         masked_prompt_preview=masked_prompt if masked_count > 0 else None,
         auto_fix_available=masked_count > 0,
+        extracted_text=extracted_text,
         document_classifications=[{"filename": file.filename}],
     )
 
