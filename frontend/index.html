@@ -260,7 +260,7 @@ function AuditLogTab() {
         <tbody>
           {logs.map((l) => (
             <tr key={l.id} className="border-b border-slate-800/50">
-              <td className="py-2 pr-3 text-slate-400">{new Date(l.timestamp).toLocaleString()}</td>
+              <td className="py-2 pr-3 text-slate-400">{new Date(l.timestamp.endsWith('Z') ? l.timestamp : l.timestamp + 'Z').toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</td>
               <td className={`py-2 pr-3 font-semibold ${l.decision === "BLOCK" ? "text-red-400" : l.decision === "WARN" ? "text-yellow-400" : "text-emerald-400"}`}>{l.decision}</td>
               <td className="py-2 pr-3">{l.risk_score} ({l.risk_level})</td>
               <td className="py-2 pr-3 text-slate-300">{(l.entity_types || []).join(", ") || "—"}</td>
