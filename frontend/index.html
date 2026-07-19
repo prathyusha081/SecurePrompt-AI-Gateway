@@ -568,6 +568,137 @@ function AnalysisTab({ currentUser }) {
   );
 }
 
+function AuthView({ onLoginSuccess }) {
+  const [isSignUp, setIsSignUp] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [role, setRole] = React.useState("developer");
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(null);
+  const [success, setSuccess] = React.useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+
+    try {
+      if (isSignUp) {
+        const res = await apiCall("/auth/signup", {
+          method: "POST",
+          body: JSON.stringify({ name, email, password, role }),
+        });
+        setSuccess("Account created successfully! Please sign in.");
+        setIsSignUp(false);
+        setPassword("");
+      } else {
+        const res = await apiCall("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+        });
+        onLoginSuccess(res);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0b0f19] text-slate-100 px-4">
+      <div className="w-full max-w-md bg-slate-900/60 border border-slate-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
+        <div className="text-center mb-6">
+          <h2 className="text-3xl font-extrabold text-indigo-400">🛡️ SecurePrompt</h2>
+          <p className="text-slate-400 text-sm mt-1">Enterprise Zero-Trust AI Firewall Gateway</p>
+        </div>
+
+        <div className="flex border-b border-slate-800 mb-6">
+          <button
+            onClick={() => { setIsSignUp(false); setError(null); setSuccess(null); }}
+            className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${!isSignUp ? "border-indigo-500 text-indigo-300" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+          >
+            Sign In
+          </button>
+          <button
+            onClick={() => { setIsSignUp(true); setError(null); setSuccess(null); }}
+            className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${isSignUp ? "border-indigo-500 text-indigo-300" : "border-transparent text-slate-400 hover:text-slate-200"}`}
+          >
+            Create Account
+          </button>
+        </div>
+
+        {error && <div className="mb-4 text-xs p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400">{error}</div>}
+        {success && <div className="mb-4 text-xs p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">{success}</div>}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {isSignUp && (
+            <div>
+              <label className="block text-xs uppercase text-slate-400 font-bold mb-1">Full Name</label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. prathyusha"
+                className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs uppercase text-slate-400 font-bold mb-1">Email Address</label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@company.com"
+              className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase text-slate-400 font-bold mb-1">Password</label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
+          {isSignUp && (
+            <div>
+              <label className="block text-xs uppercase text-slate-400 font-bold mb-1">Enterprise Role</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full bg-slate-950/60 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-300"
+              >
+                <option value="developer">👤 User (Developer)</option>
+                <option value="security_admin">🔒 Security Admin</option>
+              </select>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full mt-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 font-semibold text-sm transition-all shadow-lg shadow-indigo-950/40 disabled:opacity-50"
+          >
+            {loading ? "Processing..." : isSignUp ? "Sign Up" : "Sign In"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [prompt, setPrompt] = React.useState("");
   const [report, setReport] = React.useState(null);
@@ -580,10 +711,29 @@ function App() {
   const [model, setModel] = React.useState("llama-3.1-8b-instant");
   const [error, setError] = React.useState(null);
   const [tab, setTab] = React.useState("gateway");
-  const [currentUser, setCurrentUser] = React.useState("admin");
-  const handleUserChange = (newUser) => {
-    window.CURRENT_USER = newUser;
-    setCurrentUser(newUser);
+  const [authSession, setAuthSession] = React.useState(() => {
+    const saved = localStorage.getItem("secureprompt_session");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        window.CURRENT_USER = parsed.email;
+        return parsed;
+      } catch (e) {}
+    }
+    window.CURRENT_USER = "admin";
+    return null;
+  });
+
+  const handleLoginSuccess = (session) => {
+    localStorage.setItem("secureprompt_session", JSON.stringify(session));
+    window.CURRENT_USER = session.email;
+    setAuthSession(session);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("secureprompt_session");
+    setAuthSession(null);
+    window.CURRENT_USER = "admin";
   };
 
   // File Upload States
@@ -679,6 +829,10 @@ function App() {
 
   const sendEnabled = report && report.send_enabled;
 
+  if (!authSession) {
+    return <AuthView onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen text-slate-100 max-w-4xl mx-auto px-6 py-10">
       {DEMO_MODE && (
@@ -689,27 +843,21 @@ function App() {
       <header className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">🛡️ SecurePrompt AI Gateway</h1>
-          <p className="text-slate-400 text-sm mt-1">Zero-Trust firewall for prompts and attachments — nothing reaches the LLM unanalyzed.</p>
+          <p className="text-slate-400 text-sm mt-1">Hello {authSession.name} — Zero-Trust firewall protecting your prompts.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-1.5 text-xs">
-            <span className="text-indigo-400 font-semibold uppercase">IAM Identity:</span>
-            <select
-              value={currentUser}
-              onChange={(e) => handleUserChange(e.target.value)}
-              className="bg-slate-800 border border-slate-600 rounded text-slate-200 focus:outline-none px-1 py-0.5"
-            >
-              <option value="admin">🔒 admin (Security Auditor)</option>
-              <option value="user1">👤 user1 (Soniya - Developer)</option>
-              <option value="user2">👤 user2 (Prathyusha - Developer)</option>
-            </select>
+            <span className="text-slate-400 font-semibold uppercase">Role:</span>
+            <span className={`font-semibold font-mono ${authSession.role === "security_admin" ? "text-indigo-400" : "text-emerald-400"}`}>
+              {authSession.role}
+            </span>
           </div>
-          {GITHUB_URL && (
-            <a href={GITHUB_URL} target="_blank" rel="noreferrer"
-              className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
-              ⭐ View on GitHub
-            </a>
-          )}
+          <button
+            onClick={handleLogout}
+            className="text-xs px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 font-medium transition-colors"
+          >
+            Logout ✕
+          </button>
         </div>
       </header>
 
@@ -733,10 +881,10 @@ function App() {
         ))}
       </nav>
 
-      {tab === "dashboard" && <DashboardTab currentUser={currentUser} />}
-      {tab === "audit" && <AuditLogTab currentUser={currentUser} />}
+      {tab === "dashboard" && <DashboardTab currentUser={authSession.email} />}
+      {tab === "audit" && <AuditLogTab currentUser={authSession.email} />}
       {tab === "policies" && <PoliciesTab />}
-      {tab === "analysis" && <AnalysisTab currentUser={currentUser} />}
+      {tab === "analysis" && <AnalysisTab currentUser={authSession.email} />}
 
       {tab === "gateway" && <>
       <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-5 space-y-4">

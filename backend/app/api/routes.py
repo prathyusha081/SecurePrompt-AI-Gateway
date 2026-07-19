@@ -30,7 +30,7 @@ from app.policy.policy_engine import policy_engine
 from app.remediation.masker import mask_text
 from app.llm.router import llm_router
 from app.db.database import get_db
-from app.db.models import AuditLog
+from app.db.models import AuditLog, User
 from app.utils.auth import verify_api_key
 from app.config import settings
 
@@ -292,7 +292,9 @@ async def get_audit_logs(
     db: Session = Depends(get_db)
 ):
     query = db.query(AuditLog)
-    if x_user_id.lower() != "admin":
+    user_record = db.query(User).filter(User.email == x_user_id.strip().lower()).first()
+    is_admin = (x_user_id.lower() == "admin") or (user_record and user_record.role == "security_admin")
+    if not is_admin:
         query = query.filter(AuditLog.user == x_user_id)
     logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
     return [
@@ -312,7 +314,9 @@ async def dashboard_summary(
     db: Session = Depends(get_db)
 ):
     query = db.query(AuditLog)
-    if x_user_id.lower() != "admin":
+    user_record = db.query(User).filter(User.email == x_user_id.strip().lower()).first()
+    is_admin = (x_user_id.lower() == "admin") or (user_record and user_record.role == "security_admin")
+    if not is_admin:
         query = query.filter(AuditLog.user == x_user_id)
     logs = query.all()
     total = len(logs)
@@ -367,7 +371,9 @@ async def get_analysis_report(
         AuditLog.timestamp >= start_dt,
         AuditLog.timestamp <= end_dt
     )
-    if x_user_id.lower() != "admin":
+    user_record = db.query(User).filter(User.email == x_user_id.strip().lower()).first()
+    is_admin = (x_user_id.lower() == "admin") or (user_record and user_record.role == "security_admin")
+    if not is_admin:
         query = query.filter(AuditLog.user == x_user_id)
     logs = query.all()
 
@@ -479,3 +485,60 @@ async def get_analysis_report(
 @router.get("/health")
 async def health():
     return {"status": "ok", "service": "SecurePrompt AI Gateway"}
+
+
+# --- Authentication & User Management ---
+from pydantic import BaseModel
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+class SignUpRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+    role: str  # 'developer' or 'security_admin'
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@router.post("/auth/signup")
+async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
+    # Check if user already exists
+    existing = db.query(User).filter(User.email == req.email.strip().lower()).first()
+    if existing:
+        raise HTTPException(400, "A user with this email already exists.")
+
+    hashed = pwd_context.hash(req.password)
+    user = User(
+        name=req.name.strip(),
+        email=req.email.strip().lower(),
+        hashed_password=hashed,
+        role=req.role
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role
+    }
+
+@router.post("/auth/login")
+async def login(req: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == req.email.strip().lower()).first()
+    if not user:
+        raise HTTPException(400, "Invalid email or password.")
+
+    if not pwd_context.verify(req.password, user.hashed_password):
+        raise HTTPException(400, "Invalid email or password.")
+
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": user.role
+    }

@@ -36,3 +36,13 @@ class PolicyDecisionLog(Base):
     action = Column(String)
     triggered_by = Column(JSON, default=list)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+    role = Column(String, nullable=False)  # 'developer' or 'security_admin'
