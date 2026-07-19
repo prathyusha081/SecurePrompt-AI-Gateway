@@ -49,9 +49,12 @@ const API_KEY = window.SECUREPROMPT_API_KEY || "";
 const DEMO_MODE = window.SECUREPROMPT_DEMO_MODE || false;
 const GITHUB_URL = window.SECUREPROMPT_GITHUB_URL || "";
 
+window.CURRENT_USER = "admin";
+
 async function apiCall(path, options = {}) {
   const headers = {
     "X-API-Key": API_KEY,
+    "X-User-Id": window.CURRENT_USER || "admin",
     ...(options.headers || {}),
   };
   if (!(options.body instanceof FormData)) {
@@ -156,7 +159,7 @@ function StatCard({ label, value, accent }) {
   );
 }
 
-function DashboardTab() {
+function DashboardTab({ currentUser }) {
   const [summary, setSummary] = React.useState(null);
   const [error, setError] = React.useState(null);
   const decisionChartRef = React.useRef(null);
@@ -172,7 +175,7 @@ function DashboardTab() {
     }
   };
 
-  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => { load(); }, [currentUser]);
 
   React.useEffect(() => {
     if (!summary || !window.Chart) return;
@@ -249,7 +252,7 @@ function DashboardTab() {
   );
 }
 
-function AuditLogTab() {
+function AuditLogTab({ currentUser }) {
   const [logs, setLogs] = React.useState([]);
   const [error, setError] = React.useState(null);
 
@@ -262,7 +265,7 @@ function AuditLogTab() {
     }
   };
 
-  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => { load(); }, [currentUser]);
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 overflow-x-auto">
@@ -489,7 +492,7 @@ function AnalysisReportView({ report, startDate, endDate }) {
   );
 }
 
-function AnalysisTab() {
+function AnalysisTab({ currentUser }) {
   const today = new Date().toISOString().split('T')[0];
   const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
   
@@ -514,7 +517,7 @@ function AnalysisTab() {
 
   React.useEffect(() => {
     loadReport();
-  }, []);
+  }, [currentUser]);
 
   return (
     <div className="space-y-6">
@@ -577,6 +580,11 @@ function App() {
   const [model, setModel] = React.useState("llama-3.1-8b-instant");
   const [error, setError] = React.useState(null);
   const [tab, setTab] = React.useState("gateway");
+  const [currentUser, setCurrentUser] = React.useState("admin");
+  const handleUserChange = (newUser) => {
+    window.CURRENT_USER = newUser;
+    setCurrentUser(newUser);
+  };
 
   // File Upload States
   const [selectedFile, setSelectedFile] = React.useState(null);
@@ -683,12 +691,26 @@ function App() {
           <h1 className="text-2xl font-bold flex items-center gap-2">🛡️ SecurePrompt AI Gateway</h1>
           <p className="text-slate-400 text-sm mt-1">Zero-Trust firewall for prompts and attachments — nothing reaches the LLM unanalyzed.</p>
         </div>
-        {GITHUB_URL && (
-          <a href={GITHUB_URL} target="_blank" rel="noreferrer"
-            className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
-            ⭐ View on GitHub
-          </a>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-900/80 border border-slate-700 rounded-lg px-3 py-1.5 text-xs">
+            <span className="text-indigo-400 font-semibold uppercase">IAM Identity:</span>
+            <select
+              value={currentUser}
+              onChange={(e) => handleUserChange(e.target.value)}
+              className="bg-slate-800 border border-slate-600 rounded text-slate-200 focus:outline-none px-1 py-0.5"
+            >
+              <option value="admin">🔒 admin (Security Auditor)</option>
+              <option value="user1">👤 user1 (Soniya - Developer)</option>
+              <option value="user2">👤 user2 (Prathyusha - Developer)</option>
+            </select>
+          </div>
+          {GITHUB_URL && (
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer"
+              className="text-sm px-3 py-1.5 rounded-lg border border-slate-700 text-slate-300 hover:bg-slate-800">
+              ⭐ View on GitHub
+            </a>
+          )}
+        </div>
       </header>
 
       <nav className="flex gap-1 mb-6 border-b border-slate-800">
@@ -711,10 +733,10 @@ function App() {
         ))}
       </nav>
 
-      {tab === "dashboard" && <DashboardTab />}
-      {tab === "audit" && <AuditLogTab />}
+      {tab === "dashboard" && <DashboardTab currentUser={currentUser} />}
+      {tab === "audit" && <AuditLogTab currentUser={currentUser} />}
       {tab === "policies" && <PoliciesTab />}
-      {tab === "analysis" && <AnalysisTab />}
+      {tab === "analysis" && <AnalysisTab currentUser={currentUser} />}
 
       {tab === "gateway" && <>
       <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-5 space-y-4">

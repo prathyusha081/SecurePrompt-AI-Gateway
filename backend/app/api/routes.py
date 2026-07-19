@@ -13,7 +13,7 @@ import io
 import uuid
 from typing import Dict
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
 from docx import Document
@@ -108,7 +108,11 @@ def _build_recommendations(findings, violations) -> list[str]:
 
 
 @router.post("/analyze", response_model=AnalyzeResponse, dependencies=[Depends(verify_api_key)])
-async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
+async def analyze(
+    req: AnalyzeRequest,
+    x_user_id: str = Header(default="user1", alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
     request_id = str(uuid.uuid4())
 
     findings = pipeline.run(req.prompt)
@@ -145,6 +149,7 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
         model=req.model,
         prompt_char_count=len(req.prompt),
         was_sent=False,
+        user=x_user_id,
     )
     db.add(log)
     db.commit()
@@ -165,7 +170,12 @@ async def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/analyze-file", response_model=AnalyzeResponse, dependencies=[Depends(verify_api_key)])
-async def analyze_file(prompt: str = Form(""), file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def analyze_file(
+    prompt: str = Form(""),
+    file: UploadFile = File(...),
+    x_user_id: str = Header(default="user1", alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_MB}MB limit.")
@@ -201,6 +211,7 @@ async def analyze_file(prompt: str = Form(""), file: UploadFile = File(...), db:
         risk_level=risk["level"].value, entity_types=entity_types,
         policy_violations=[v.policy_name for v in policy_result["violations"]],
         prompt_char_count=len(combined_text), was_sent=False,
+        user=x_user_id,
     ))
     db.commit()
 
@@ -275,8 +286,15 @@ async def send(req: SendRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/audit-logs", dependencies=[Depends(verify_api_key)])
-async def get_audit_logs(limit: int = 50, db: Session = Depends(get_db)):
-    logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).all()
+async def get_audit_logs(
+    limit: int = 50,
+    x_user_id: str = Header(default="user1", alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(AuditLog)
+    if x_user_id.lower() != "admin":
+        query = query.filter(AuditLog.user == x_user_id)
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(limit).all()
     return [
         {
             "id": l.id, "request_id": l.request_id, "timestamp": l.timestamp,
@@ -289,8 +307,14 @@ async def get_audit_logs(limit: int = 50, db: Session = Depends(get_db)):
 
 
 @router.get("/dashboard/summary", dependencies=[Depends(verify_api_key)])
-async def dashboard_summary(db: Session = Depends(get_db)):
-    logs = db.query(AuditLog).all()
+async def dashboard_summary(
+    x_user_id: str = Header(default="user1", alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
+    query = db.query(AuditLog)
+    if x_user_id.lower() != "admin":
+        query = query.filter(AuditLog.user == x_user_id)
+    logs = query.all()
     total = len(logs)
     blocked = sum(1 for l in logs if l.decision == "BLOCK")
     warned = sum(1 for l in logs if l.decision == "WARN")
@@ -326,7 +350,12 @@ async def update_policies(policies: list[dict]):
 
 
 @router.get("/analysis/report", dependencies=[Depends(verify_api_key)])
-async def get_analysis_report(start_date: str, end_date: str, db: Session = Depends(get_db)):
+async def get_analysis_report(
+    start_date: str,
+    end_date: str,
+    x_user_id: str = Header(default="user1", alias="X-User-Id"),
+    db: Session = Depends(get_db)
+):
     from datetime import date, datetime, time
     try:
         start_dt = datetime.combine(date.fromisoformat(start_date), time.min)
@@ -334,10 +363,13 @@ async def get_analysis_report(start_date: str, end_date: str, db: Session = Depe
     except ValueError as e:
         raise HTTPException(400, f"Invalid date format. Expected YYYY-MM-DD. Error: {e}")
 
-    logs = db.query(AuditLog).filter(
+    query = db.query(AuditLog).filter(
         AuditLog.timestamp >= start_dt,
         AuditLog.timestamp <= end_dt
-    ).all()
+    )
+    if x_user_id.lower() != "admin":
+        query = query.filter(AuditLog.user == x_user_id)
+    logs = query.all()
 
     total = len(logs)
     if total == 0:
