@@ -319,35 +319,15 @@ function AnalysisTab() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState(null);
 
-  const trafficChartRef = React.useRef(null);
-  const entitiesChartRef = React.useRef(null);
-  const decisionsChartRef = React.useRef(null);
   const chartInstances = React.useRef({});
 
-  const loadReport = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await apiCall(`/analysis/report?start_date=${startDate}&end_date=${endDate}`);
-      setReport(res);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
+  const trafficCanvasRef = React.useCallback((node) => {
+    if (chartInstances.current.traffic) {
+      chartInstances.current.traffic.destroy();
+      chartInstances.current.traffic = null;
     }
-  };
-
-  React.useEffect(() => {
-    loadReport();
-  }, []);
-
-  React.useEffect(() => {
-    if (!report || !window.Chart) return;
-
-    Object.values(chartInstances.current).forEach((c) => c && c.destroy());
-
-    if (trafficChartRef.current && report.daily_trends?.length) {
-      chartInstances.current.traffic = new Chart(trafficChartRef.current, {
+    if (node && report && report.daily_trends?.length && window.Chart) {
+      chartInstances.current.traffic = new Chart(node, {
         type: "line",
         data: {
           labels: report.daily_trends.map((t) => t.date),
@@ -379,13 +359,19 @@ function AnalysisTab() {
         },
       });
     }
+  }, [report]);
 
-    if (decisionsChartRef.current) {
+  const decisionsCanvasRef = React.useCallback((node) => {
+    if (chartInstances.current.decisions) {
+      chartInstances.current.decisions.destroy();
+      chartInstances.current.decisions = null;
+    }
+    if (node && report && window.Chart) {
       const allowed = report.decisions.ALLOW || 0;
       const warned = report.decisions.WARN || 0;
       const blocked = report.decisions.BLOCK || 0;
       
-      chartInstances.current.decisions = new Chart(decisionsChartRef.current, {
+      chartInstances.current.decisions = new Chart(node, {
         type: "doughnut",
         data: {
           labels: ["Allowed", "Warned", "Blocked"],
@@ -405,13 +391,19 @@ function AnalysisTab() {
         },
       });
     }
+  }, [report]);
 
-    if (entitiesChartRef.current) {
+  const entitiesCanvasRef = React.useCallback((node) => {
+    if (chartInstances.current.entities) {
+      chartInstances.current.entities.destroy();
+      chartInstances.current.entities = null;
+    }
+    if (node && report && window.Chart) {
       const entityEntries = Object.entries(report.entity_counts || {});
       const labels = entityEntries.map(([k]) => k);
       const data = entityEntries.map(([, v]) => v);
 
-      chartInstances.current.entities = new Chart(entitiesChartRef.current, {
+      chartInstances.current.entities = new Chart(node, {
         type: "bar",
         data: {
           labels: labels.length ? labels : ["No data"],
@@ -431,8 +423,24 @@ function AnalysisTab() {
         },
       });
     }
-
   }, [report]);
+
+  const loadReport = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiCall(`/analysis/report?start_date=${startDate}&end_date=${endDate}`);
+      setReport(res);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    loadReport();
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -480,19 +488,19 @@ function AnalysisTab() {
           <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-2 rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <p className="text-slate-300 text-sm mb-3 font-semibold">Daily Request Volume & Avg Risk Trend</p>
-              <canvas ref={trafficChartRef} height="200"></canvas>
+              <canvas ref={trafficCanvasRef} height="200"></canvas>
             </div>
 
             <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <p className="text-slate-300 text-sm mb-3 font-semibold">Decision Distribution</p>
-              <canvas ref={decisionsChartRef} height="200"></canvas>
+              <canvas ref={decisionsCanvasRef} height="200"></canvas>
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <p className="text-slate-300 text-sm mb-3 font-semibold">Entity Detections Overview</p>
-              <canvas ref={entitiesChartRef} height="200"></canvas>
+              <canvas ref={entitiesCanvasRef} height="200"></canvas>
             </div>
 
             <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/10 p-5 flex flex-col justify-between">
