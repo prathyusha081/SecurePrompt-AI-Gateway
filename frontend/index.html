@@ -734,6 +734,14 @@ function App() {
     localStorage.removeItem("secureprompt_session");
     setAuthSession(null);
     window.CURRENT_USER = "admin";
+    setPrompt("");
+    setReport(null);
+    setMaskedPrompt(null);
+    setLlmResponse(null);
+    setSelectedFile(null);
+    setExtractedText("");
+    setShowExtractedText(false);
+    setTab("gateway");
   };
 
   // File Upload States
