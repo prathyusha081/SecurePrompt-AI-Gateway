@@ -3,8 +3,8 @@
 # without touching any code. Reloaded on every /analyze call.
 
 policies:
-  - name: BLOCK_PII
-    description: "Block prompts containing structured PII (Aadhaar, PAN, SSN, Passport, Credit Card)."
+  - name: BLOCK_PII_LEAKS
+    description: "Block prompts or attachments containing employee/customer PII (SSN, Aadhaar, PAN, Passport, Credit Cards)."
     action: BLOCK
     match_entity_types:
       - AADHAAR
@@ -13,8 +13,8 @@ policies:
       - PASSPORT_IN
       - CREDIT_CARD
 
-  - name: BLOCK_SECRETS
-    description: "Block any prompt containing cloud credentials, private keys, or tokens."
+  - name: BLOCK_CLOUD_SECRETS
+    description: "Block developers from pasting API keys, cloud credentials, tokens, or private keys."
     action: BLOCK
     match_entity_types:
       - AWS_ACCESS_KEY
@@ -30,53 +30,73 @@ policies:
       - OPENAI_KEY
       - PASSWORD_FIELD
 
-  - name: BLOCK_FINANCIAL
-    description: "Block payroll, bank account, and financial-statement content."
+  - name: BLOCK_HR_PAYROLL
+    description: "Block prompts containing internal salaries, CTC sheets, compensation records, or payroll files."
     action: BLOCK
     match_entity_types:
-      - BANK_ACCOUNT
-      - IFSC_CODE
       - DOC_CLASS_PAYROLL
-      - DOC_CLASS_FINANCIAL
 
-  - name: BLOCK_INTERNAL_DOC
-    description: "Block confidential/restricted internal documents, architecture diagrams, and customer data."
+  - name: BLOCK_PROPRIETARY_CODE
+    description: "Block developers from uploading proprietary source code, DB schemas, or functions to public LLMs."
+    action: BLOCK
+    match_entity_types:
+      - DOC_CLASS_SOURCE_CODE
+
+  - name: BLOCK_LEGAL_NDA
+    description: "Block uploading active legal settlements, NDA documents, or attorney-client privileged letters."
+    action: BLOCK
+    match_entity_types:
+      - DOC_CLASS_LEGAL
+
+  - name: BLOCK_INFRA_ARCHITECTURE
+    description: "Block uploading internal network topologies, system architectures, or design diagrams."
     action: BLOCK
     match_entity_types:
       - DOC_CLASS_ARCHITECTURE_DOC
+
+  - name: BLOCK_CRM_CUSTOMER_DATA
+    description: "Block uploads containing customer databases, client spreadsheets, or sales leads lists."
+    action: BLOCK
+    match_entity_types:
       - DOC_CLASS_CUSTOMER_DATA
 
-  - name: BLOCK_PHI
-    description: "Block medical/health information."
+  - name: BLOCK_FINANCIAL_REPORTS
+    description: "Block uploading balance sheets, revenue forecasts, or internal bank statements."
+    action: BLOCK
+    match_entity_types:
+      - DOC_CLASS_FINANCIAL
+
+  - name: BLOCK_PHI_HEALTH
+    description: "Block patient charts, medical reports, or protected health information (PHI)."
     action: BLOCK
     match_entity_types:
       - DOC_CLASS_MEDICAL
 
   - name: BLOCK_JAILBREAK
-    description: "Block known jailbreak-framing attempts."
+    description: "Block adversarial prompts attempting to bypass model safety rules (jailbreaks)."
     action: BLOCK
     match_entity_types_prefix: "JAILBREAK_"
 
   - name: WARN_PROMPT_INJECTION
-    description: "Warn (but do not hard-block) on possible prompt injection language."
+    description: "Warn on prompt injection patterns that attempt to hijack downstream LLM context."
     action: WARN
     match_entity_types:
       - PROMPT_INJECTION_PHRASE
 
   - name: WARN_PHONE
-    description: "Warn on phone numbers; allow send after acknowledgement."
+    description: "Warn on telephone numbers; allow user to send after confirming it's not a PII leak."
     action: WARN
     match_entity_types:
       - PHONE_IN
       - PHONE_INTL
 
   - name: ALLOW_EMAIL
-    description: "Emails are allowed by default (common in legitimate business prompts)."
+    description: "Permit emails (commonly needed for sending standard business communication)."
     action: ALLOW
     match_entity_types:
       - EMAIL
 
   - name: ALLOW_MASKED_CONTENT
-    description: "If the user has applied auto-masking, allow send even if original had violations."
+    description: "Allow sending if the prompt was fully sanitized/redacted (contains no active violations)."
     action: ALLOW_IF_MASKED
     match_entity_types: []
