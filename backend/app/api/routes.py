@@ -325,6 +325,125 @@ async def update_policies(policies: list[dict]):
     return {"status": "saved", "count": len(policies)}
 
 
+@router.get("/analysis/report", dependencies=[Depends(verify_api_key)])
+async def get_analysis_report(start_date: str, end_date: str, db: Session = Depends(get_db)):
+    from datetime import date, datetime, time
+    try:
+        start_dt = datetime.combine(date.fromisoformat(start_date), time.min)
+        end_dt = datetime.combine(date.fromisoformat(end_date), time.max)
+    except ValueError as e:
+        raise HTTPException(400, f"Invalid date format. Expected YYYY-MM-DD. Error: {e}")
+
+    logs = db.query(AuditLog).filter(
+        AuditLog.timestamp >= start_dt,
+        AuditLog.timestamp <= end_dt
+    ).all()
+
+    total = len(logs)
+    if total == 0:
+        return {
+            "total_requests": 0,
+            "decisions": {"ALLOW": 0, "WARN": 0, "BLOCK": 0},
+            "avg_risk_score": 0.0,
+            "avg_prompt_char_count": 0.0,
+            "was_sent_percentage": 0.0,
+            "daily_trends": [],
+            "entity_counts": {},
+            "policy_counts": {},
+            "provider_counts": {},
+            "risk_level_counts": {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0},
+            "insights": ["No audit logs found for the selected date range."]
+        }
+
+    blocked = sum(1 for l in logs if l.decision == "BLOCK")
+    warned = sum(1 for l in logs if l.decision == "WARN")
+    allowed = sum(1 for l in logs if l.decision == "ALLOW")
+    
+    avg_risk = sum(l.risk_score for l in logs) / total
+    avg_char = sum(l.prompt_char_count for l in logs) / total
+    was_sent_count = sum(1 for l in logs if l.was_sent)
+    was_sent_pct = (was_sent_count / total) * 100
+
+    entity_counts = {}
+    policy_counts = {}
+    provider_counts = {}
+    risk_level_counts = {"LOW": 0, "MEDIUM": 0, "HIGH": 0, "CRITICAL": 0}
+    
+    for l in logs:
+        for et in (l.entity_types or []):
+            entity_counts[et] = entity_counts.get(et, 0) + 1
+        for pv in (l.policy_violations or []):
+            policy_counts[pv] = policy_counts.get(pv, 0) + 1
+        
+        prov_model = f"{l.provider or 'Unknown'}/{l.model or 'Unknown'}"
+        provider_counts[prov_model] = provider_counts.get(prov_model, 0) + 1
+        
+        rl = l.risk_level or "LOW"
+        risk_level_counts[rl] = risk_level_counts.get(rl, 0) + 1
+
+    daily_data = {}
+    for l in logs:
+        day_str = l.timestamp.date().isoformat()
+        if day_str not in daily_data:
+            daily_data[day_str] = {"count": 0, "total_risk": 0}
+        daily_data[day_str]["count"] += 1
+        daily_data[day_str]["total_risk"] += l.risk_score
+
+    daily_trends = []
+    for d_str in sorted(daily_data.keys()):
+        daily_trends.append({
+            "date": d_str,
+            "count": daily_data[d_str]["count"],
+            "avg_risk": round(daily_data[d_str]["total_risk"] / daily_data[d_str]["count"], 1)
+        })
+
+    insights = []
+    if daily_trends:
+        peak_day = max(daily_trends, key=lambda x: x["count"])
+        insights.append(f"Traffic peaked on {peak_day['date']} with {peak_day['count']} requests analyzed.")
+
+    blocked_logs = [l for l in logs if l.decision == "BLOCK"]
+    allowed_logs = [l for l in logs if l.decision == "ALLOW"]
+    if blocked_logs and allowed_logs:
+        avg_blocked_len = sum(l.prompt_char_count for l in blocked_logs) / len(blocked_logs)
+        avg_allowed_len = sum(l.prompt_char_count for l in allowed_logs) / len(allowed_logs)
+        diff_pct = ((avg_blocked_len - avg_allowed_len) / (avg_allowed_len or 1)) * 100
+        if diff_pct > 0:
+            insights.append(f"Blocked prompts are on average {diff_pct:.1f}% longer ({int(avg_blocked_len)} chars) than allowed prompts ({int(avg_allowed_len)} chars).")
+        else:
+            insights.append(f"Allowed prompts are on average {abs(diff_pct):.1f}% longer ({int(avg_allowed_len)} chars) than blocked prompts ({int(avg_blocked_len)} chars).")
+
+    if provider_counts:
+        top_model = max(provider_counts.items(), key=lambda x: x[1])[0]
+        insights.append(f"The most active target LLM provider/model is {top_model} ({provider_counts[top_model]} requests).")
+
+    if entity_counts:
+        top_entity, top_ent_count = max(entity_counts.items(), key=lambda x: x[1])
+        insights.append(f"Sensitive entity '{top_entity}' was the most frequent trigger, flagged in {top_ent_count} instances.")
+
+    total_violations = sum(policy_counts.values())
+    if total_violations > 0:
+        insights.append(f"A total of {total_violations} policy rules were violated in this date range.")
+
+    return {
+        "total_requests": total,
+        "decisions": {
+            "ALLOW": allowed,
+            "WARN": warned,
+            "BLOCK": blocked
+        },
+        "avg_risk_score": round(avg_risk, 1),
+        "avg_prompt_char_count": round(avg_char, 1),
+        "was_sent_percentage": round(was_sent_pct, 1),
+        "daily_trends": daily_trends,
+        "entity_counts": entity_counts,
+        "policy_counts": policy_counts,
+        "provider_counts": provider_counts,
+        "risk_level_counts": risk_level_counts,
+        "insights": insights
+    }
+
+
 @router.get("/health")
 async def health():
     return {"status": "ok", "service": "SecurePrompt AI Gateway"}
