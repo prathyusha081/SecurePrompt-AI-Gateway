@@ -359,7 +359,6 @@ function AnalysisTab() {
               backgroundColor: "rgba(129, 140, 248, 0.1)",
               borderWidth: 2,
               fill: true,
-              yAxisID: "y",
             },
             {
               label: "Avg Risk Score",
@@ -368,28 +367,16 @@ function AnalysisTab() {
               backgroundColor: "transparent",
               borderWidth: 2,
               borderDash: [5, 5],
-              yAxisID: "y1",
             }
           ],
         },
         options: {
+          responsive: true,
+          maintainAspectRatio: false,
           plugins: { legend: { labels: { color: "#cbd5e1" } } },
           scales: {
             x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
-            y: { 
-              type: "linear",
-              position: "left",
-              ticks: { color: "#94a3b8" }, 
-              grid: { color: "#1e293b" } 
-            },
-            y1: {
-              type: "linear",
-              position: "right",
-              ticks: { color: "#94a3b8" },
-              grid: { drawOnChartArea: false },
-              min: 0,
-              max: 100
-            }
+            y: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } }
           },
         },
       });
@@ -411,6 +398,8 @@ function AnalysisTab() {
           }],
         },
         options: { 
+          responsive: true,
+          maintainAspectRatio: false,
           plugins: { 
             legend: { 
               position: "bottom",
@@ -437,6 +426,8 @@ function AnalysisTab() {
           }],
         },
         options: {
+          responsive: true,
+          maintainAspectRatio: false,
           indexAxis: "y",
           plugins: { legend: { display: false } },
           scales: {
