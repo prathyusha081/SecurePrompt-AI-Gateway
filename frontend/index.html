@@ -371,8 +371,6 @@ function AnalysisTab() {
           ],
         },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
           plugins: { legend: { labels: { color: "#cbd5e1" } } },
           scales: {
             x: { ticks: { color: "#94a3b8" }, grid: { color: "#1e293b" } },
@@ -398,8 +396,6 @@ function AnalysisTab() {
           }],
         },
         options: { 
-          responsive: true,
-          maintainAspectRatio: false,
           plugins: { 
             legend: { 
               position: "bottom",
@@ -426,8 +422,6 @@ function AnalysisTab() {
           }],
         },
         options: {
-          responsive: true,
-          maintainAspectRatio: false,
           indexAxis: "y",
           plugins: { legend: { display: false } },
           scales: {
@@ -486,25 +480,19 @@ function AnalysisTab() {
           <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-2 rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <p className="text-slate-300 text-sm mb-3 font-semibold">Daily Request Volume & Avg Risk Trend</p>
-              <div className="h-64 relative">
-                <canvas ref={trafficChartRef}></canvas>
-              </div>
+              <canvas ref={trafficChartRef} height="200"></canvas>
             </div>
 
             <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <p className="text-slate-300 text-sm mb-3 font-semibold">Decision Distribution</p>
-              <div className="h-64 relative flex items-center justify-center">
-                <canvas ref={decisionsChartRef}></canvas>
-              </div>
+              <canvas ref={decisionsChartRef} height="200"></canvas>
             </div>
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
               <p className="text-slate-300 text-sm mb-3 font-semibold">Entity Detections Overview</p>
-              <div className="h-64 relative">
-                <canvas ref={entitiesChartRef}></canvas>
-              </div>
+              <canvas ref={entitiesChartRef} height="200"></canvas>
             </div>
 
             <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/10 p-5 flex flex-col justify-between">
