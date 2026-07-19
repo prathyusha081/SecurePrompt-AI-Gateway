@@ -14,6 +14,31 @@
   body { background:#0b0f19; }
   ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background:#334155; border-radius:4px; }
 </style>
+<script>
+  window.addEventListener('error', function(e) {
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#ef4444;color:#fff;padding:15px;z-index:99999;font-family:monospace;font-size:12px;white-space:pre-wrap;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+    errDiv.innerHTML = '<strong>JavaScript Error:</strong> ' + e.message + ' at ' + e.filename + ':' + e.lineno + ':' + e.colno + '\n' + (e.error ? e.error.stack : '');
+    const closeBtn = document.createElement('button');
+    closeBtn.innerText = '✕';
+    closeBtn.style.cssText = 'float:right;background:rgba(255,255,255,0.2);border:none;color:#fff;padding:2px 8px;border-radius:4px;cursor:pointer;font-weight:bold;';
+    closeBtn.onclick = function() { errDiv.remove(); };
+    errDiv.appendChild(closeBtn);
+    document.body.appendChild(errDiv);
+  });
+
+  window.addEventListener('unhandledrejection', function(e) {
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:fixed;top:0;left:0;width:100%;background:#f59e0b;color:#000;padding:15px;z-index:99999;font-family:monospace;font-size:12px;white-space:pre-wrap;box-shadow:0 4px 6px rgba(0,0,0,0.3);';
+    errDiv.innerHTML = '<strong>Unhandled Promise Rejection:</strong> ' + (e.reason ? (e.reason.message || e.reason) : 'Unknown reason') + '\n' + (e.reason && e.reason.stack ? e.reason.stack : '');
+    const closeBtn = document.createElement('button');
+    closeBtn.innerText = '✕';
+    closeBtn.style.cssText = 'float:right;background:rgba(0,0,0,0.2);border:none;color:#000;padding:2px 8px;border-radius:4px;cursor:pointer;font-weight:bold;';
+    closeBtn.onclick = function() { errDiv.remove(); };
+    errDiv.appendChild(closeBtn);
+    document.body.appendChild(errDiv);
+  });
+</script>
 </head>
 <body>
 <div id="root"></div>
