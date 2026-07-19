@@ -19,7 +19,7 @@ SECRET_PATTERNS = {
     "JWT_TOKEN": r"eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
     "GENERIC_API_KEY": r"(?i)(api[_-]?key|secret|token)\s*[:=]\s*[\"']?[A-Za-z0-9_\-]{16,}[\"']?",
     "DB_CONNECTION_STRING": r"(?i)(postgres|postgresql|mysql|mongodb(\+srv)?|redis)://[^\s\"']+:[^\s\"']+@[^\s\"']+",
-    "OPENAI_KEY": r"sk-[A-Za-z0-9]{20,}",
+    "OPENAI_KEY": r"sk-[A-Za-z0-9_\-]{20,}",
 }
 
 
