@@ -488,10 +488,35 @@ async def health():
 
 
 # --- Authentication & User Management ---
+import os
+import hashlib
 from pydantic import BaseModel
-from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+def hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    hashed = hashlib.scrypt(
+        password.encode('utf-8'),
+        salt=salt,
+        n=16384,
+        r=8,
+        p=1
+    )
+    return f"{salt.hex()}:{hashed.hex()}"
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        salt_hex, hash_hex = stored_hash.split(":")
+        salt = bytes.fromhex(salt_hex)
+        computed = hashlib.scrypt(
+            password.encode('utf-8'),
+            salt=salt,
+            n=16384,
+            r=8,
+            p=1
+        )
+        return computed.hex() == hash_hex
+    except Exception:
+        return False
 
 class SignUpRequest(BaseModel):
     name: str
@@ -510,7 +535,7 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
     if existing:
         raise HTTPException(400, "A user with this email already exists.")
 
-    hashed = pwd_context.hash(req.password)
+    hashed = hash_password(req.password)
     user = User(
         name=req.name.strip(),
         email=req.email.strip().lower(),
@@ -533,7 +558,7 @@ async def login(req: LoginRequest, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(400, "Invalid email or password.")
 
-    if not pwd_context.verify(req.password, user.hashed_password):
+    if not verify_password(req.password, user.hashed_password):
         raise HTTPException(400, "Invalid email or password.")
 
     return {
