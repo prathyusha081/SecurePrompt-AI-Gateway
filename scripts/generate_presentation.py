@@ -270,11 +270,38 @@ def create_presentation():
     insert_image_safe(slide8, "media__1784442779392.png", Inches(7.2), Inches(1.8), Inches(5.3), Inches(4.5))
 
     # ----------------------------------------------------
-    # SLIDE 9: SUMMARY & SECURE AI ROADMAP
+    # SLIDE 9: IAM DEEP-DIVE: ROLE-BASED DATA PARTITIONING (RBAC)
     # ----------------------------------------------------
     slide9 = prs.slides.add_slide(blank_layout)
     set_background(slide9)
-    add_header(slide9, "Summary & Career Roadmap: Security with AI")
+    add_header(slide9, "IAM Deep-Dive: Role-Based Data Management")
+    
+    # Left Column: PEP / PDP / PIP Architecture
+    add_textbox(slide9, Inches(0.8), Inches(1.8), Inches(5.5), Inches(0.4), "PEP / PDP / PIP Implementation Flow", font_size=14, font_color=indigo, bold=True)
+    bullets_architecture = [
+        "PEP (Policy Enforcement Point): FastAPI gateway intercepts the incoming request and validates the X-User-Id header context.",
+        "PDP (Policy Decision Point): The backend resolves authorization by querying the database to fetch the active user role ('developer' vs 'security_admin').",
+        "PIP (Policy Information Point): Dynamic query filtering acts as Row-Level Security. Developers only query and view logs where AuditLog.user matches their email.",
+        "Observability Separation: Security Admins bypass row filters to perform aggregated analytics across the entire tenant's data logs."
+    ]
+    add_bullet_list(slide9, Inches(0.8), Inches(2.3), Inches(5.5), Inches(4.5), bullets_architecture, font_size=13)
+    
+    # Right Column: Advanced IAM Roadmap Pitch
+    add_textbox(slide9, Inches(7.0), Inches(1.8), Inches(5.5), Inches(0.4), "Future Enterprise IAM & Security Concepts", font_size=14, font_color=emerald, bold=True)
+    bullets_advanced = [
+        "Signed JWT Claims: Transition to JSON Web Tokens (JWT) to cryptographically sign claims (email, role, department), avoiding database roundtrips.",
+        "PII Tokenization Vault: Use a secure token vault to replace sensitive PII (e.g. name) with temporary tokens (e.g. TOKEN_98) before LLM routing, detokenizing on return.",
+        "LLM Credential Vaulting: Store model API keys in HashiCorp Vault or AWS Secrets Manager. Gateway proxies requests to enforce Least Privilege access.",
+        "Attribute-Based Access Control (ABAC): Control LLM routing and rate-limiting using attributes like department budgets, time-of-day, and prompt costs."
+    ]
+    add_bullet_list(slide9, Inches(7.0), Inches(2.3), Inches(5.5), Inches(4.5), bullets_advanced, font_size=13)
+
+    # ----------------------------------------------------
+    # SLIDE 10: SUMMARY & SECURE AI ROADMAP
+    # ----------------------------------------------------
+    slide10 = prs.slides.add_slide(blank_layout)
+    set_background(slide10)
+    add_header(slide10, "Summary & Career Roadmap: Security with AI")
     
     bullets_roadmap = [
         "Full-Stack Foundation: Built a high-performance, containerized, and deployed firewall bridging Web App engineering and AI governance.",
@@ -284,7 +311,7 @@ def create_presentation():
         "   2. Vector DB Sanitization: Implement safe embeddings (strip PII before converting prompts to vectors for retrieval-augmented generation).",
         "   3. API Key Vault Integration: Store target LLM API keys in HashiCorp Vault or AWS Secrets Manager, injected dynamically by the gateway."
     ]
-    add_bullet_list(slide9, Inches(0.8), Inches(1.8), Inches(11.7), Inches(5.0), bullets_roadmap, font_size=15)
+    add_bullet_list(slide10, Inches(0.8), Inches(1.8), Inches(11.7), Inches(5.0), bullets_roadmap, font_size=15)
 
     # Save presentation
     output_path = Path("docs/SecurePrompt_AI_Gateway_Presentation.pptx")
